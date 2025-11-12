@@ -1,8 +1,12 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from database import create_document, get_documents
+from schemas import ContactMessage, Subscriber
 
-app = FastAPI()
+app = FastAPI(title="Valerio Riccio - Instagram Expert API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,11 +18,11 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello from FastAPI Backend!"}
+    return {"message": "API online", "author": "Valerio Riccio"}
 
 @app.get("/api/hello")
 def hello():
-    return {"message": "Hello from the backend API!"}
+    return {"message": "Ciao dal backend!"}
 
 @app.get("/test")
 def test_database():
@@ -64,6 +68,34 @@ def test_database():
     
     return response
 
+# Public endpoints for the site
+class ContactRequest(ContactMessage):
+    pass
+
+class SubscribeRequest(Subscriber):
+    pass
+
+@app.post("/api/contact")
+def submit_contact(payload: ContactRequest):
+    try:
+        doc_id = create_document("contactmessage", payload)
+        return {"status": "ok", "id": doc_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/subscribe")
+def subscribe(payload: SubscribeRequest):
+    try:
+        # ensure lowercase email uniqueness check (basic)
+        existing = get_documents("subscriber", {"email": payload.email.lower()}, limit=1)
+        if existing:
+            return {"status": "exists"}
+        data = payload.model_dump()
+        data["email"] = data["email"].lower()
+        doc_id = create_document("subscriber", data)
+        return {"status": "ok", "id": doc_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
